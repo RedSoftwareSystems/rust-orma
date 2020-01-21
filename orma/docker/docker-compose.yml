@@ -1,0 +1,12 @@
+version: "3.4"
+
+services:
+  pgintrared:
+    environment:
+      - POSTGRES_USER=pgactix
+      - POSTGRES_PASSWORD=pgactix
+    build:
+      context: ./
+      dockerfile: Dockerfile.postgres
+    ports:
+      - 5433:5432

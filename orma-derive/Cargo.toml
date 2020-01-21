@@ -1,0 +1,18 @@
+[package]
+name = "orma-derive"
+version = "0.1.0"
+authors = ["Andrea Chiumenti <achiumenti@red.software.systems>"]
+edition = "2018"
+
+[lib]
+proc_macro = true
+
+[dependencies]
+syn = { version = "1.0.13", features = ["extra-traits"]}
+proc-macro2 = "1.0.7"
+quote = "1.0.2"
+
+[dev-dependencies]
+serde = "1.0.104"
+serde_derive = "1.0.104"
+orma = {path = '../orma'}

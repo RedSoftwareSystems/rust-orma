@@ -7,7 +7,7 @@ license = "MIT"
 description = "Derive macros for Orma"
 repository = "https://github.com/RedSoftwareSystems/rust-orma"
 readme = "../README.md"
-keywords = ["database", "postgres", "postgresql", "sql", "orm", "orma", "jsonb", "json"]
+keywords = ["postgres", "postgresql", "orm", "orma", "json"]
 categories = ["database"]
 
 [lib]

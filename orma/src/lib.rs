@@ -1,3 +1,6 @@
+#![doc(
+    html_logo_url = "https://raw.githubusercontent.com/RedSoftwareSystems/rust-orma/master/orma.svg?sanitize=true"
+)]
 //! # orma
 //!
 //! A PostgreSQL ORM wirtten in Rust language

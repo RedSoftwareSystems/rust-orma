@@ -23,7 +23,7 @@
 //!
 //! **orma** is thought to be mapped over tables that have at least the following columns:
 //!
-//! ```
+//! ```disable
 //! - id: uuid NOT NULL
 //! - version: integer NOT NULL
 //! - data: jsonb
@@ -46,7 +46,7 @@
 //!
 //! Using an imaginary "pgactix" database.
 //!
-//! ```edition2018
+//! ```edition2018,disable
 //! use orma_derive::DbData;
 //! use serde_derive::Serialize;
 //! use orma::*;

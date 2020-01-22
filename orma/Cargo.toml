@@ -7,7 +7,7 @@ license = "MIT"
 description = "A PostgreSQL ORM wirtten in Rust language"
 repository = "https://github.com/RedSoftwareSystems/rust-orma"
 readme = "../README.md"
-keywords = ["database", "postgres", "postgresql", "sql", "orm", "orma", "jsonb", "json"]
+keywords = ["postgres", "postgresql", "orm", "sql", "json"]
 categories = ["database"]
 
 [dependencies]

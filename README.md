@@ -1,4 +1,4 @@
-# Rust-Orma
+# Rust-Orma <img src="orma.svg" alt="orma logo" height=26/>
 
 A special PostgreSQL ORM written in Rust language in async flavour!
 

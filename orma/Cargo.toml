@@ -3,8 +3,12 @@ name = "orma"
 version = "0.1.0"
 authors = ["Andrea Chiumenti <achiumenti@red.software.systems>"]
 edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license = "MIT"
+description = "A PostgreSQL ORM wirtten in Rust language"
+repository = "https://github.com/RedSoftwareSystems/rust-orma"
+readme = "../README.md"
+keywords = ["database", "postgres", "postgresql", "sql", "orm", "orma", "jsonb", "json"]
+categories = ["database"]
 
 [dependencies]
 tokio-postgres = {version = "0.5.1", features = ["with-uuid-0_8", "with-serde_json-1", "runtime"]}

@@ -64,7 +64,7 @@
 //!         .await
 //!         .unwrap();
 //!     tokio::spawn(conn);
-//!     Connection::from(client)
+//!     client.into()
 //! }
 //!
 //! #[pk(field_1 = "field1", field_2 = "field2")]

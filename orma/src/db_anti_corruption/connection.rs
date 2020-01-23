@@ -189,7 +189,8 @@ impl Connection {
     /// ```
     pub async fn transaction(&mut self) -> Result<(), DbError> {
         let qry = if self.transaction_n == 0 {
-            String::from("BEGIN")
+            // String::from("BEGIN")
+            "BEGIN".into()
         } else {
             format!("SAVEPOINT pt{}", self.transaction_n + 1)
         };

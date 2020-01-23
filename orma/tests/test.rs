@@ -22,7 +22,7 @@ pub async fn create_connection() -> Connection {
         .await
         .unwrap();
     tokio::spawn(conn);
-    Connection::from(client)
+    client.into()
 }
 
 pub async fn clear_tables(conn: &mut Connection) -> Result<(), DbError> {

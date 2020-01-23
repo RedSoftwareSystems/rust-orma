@@ -33,7 +33,7 @@ use syn;
 pub fn dbdata_macro_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).unwrap();
 
-    TokenStream::from(dbdata::impl_dbdata_macro(&ast))
+    dbdata::impl_dbdata_macro(&ast).into()
 }
 
 #[cfg(test)]

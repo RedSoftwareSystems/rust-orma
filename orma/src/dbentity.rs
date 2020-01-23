@@ -53,16 +53,12 @@ pub trait DbData {
     }
 
     /// Select part from instance
-    fn select_part1() -> String {
+    fn select_part1(&self) -> String {
         Self::select_part()
     }
 
-    // /// In a data table each record is unique by at least a set of keys present in its data column.\n
-    // /// This pk is used to retrieve the id and version of the table record.
-    // fn find_table_id_and_version<'a, 'b: 'a>(
-    //     &'b self,
-    //     conn: &'a Connection,
-    // ) -> BoxFuture<'a, Result<Option<(Uuid, i32)>, DbError>>; //BoxFuture<Result<Option<(Uuid, i32)>, DbError>>;
+    /// In a data table each record is unique by at least a set of keys present in its data column.\n
+    /// This pk is used to retrieve the id and version of the table record.
     fn pk_filter(&self) -> Vec<(&str, &(dyn ToSql + Sync))>;
 }
 
@@ -125,10 +121,6 @@ where
                 where_clause = where_clauses
             ))
             .await?;
-        // let params: Vec<_> = where_values
-        //     .iter()
-        //     //.map(|param| param.as_ref() as &(dyn ToSql + Sync))
-        //     .collect();
         let result = conn.query(&prepared_s, &where_values[..]).await?;
         if result.is_empty() {
             Ok(None)
@@ -261,6 +253,10 @@ where
     }
 
     /// Searches for a record where filter over data column (JSONB) matches provided parameters.
+    /// ## Example
+    /// ```ignore
+    /// DbEntity::<User>::find_by(db_conn, ("data->>'user_name'=$1", &["some_name"]));
+    /// ```
     pub async fn find_by(
         conn: &Connection,
         filter: (&str, &[&(dyn ToSql + Sync)]),
@@ -285,6 +281,19 @@ where
     /// Searching all matching records defined by filtre clause (first element of the filter tuple)\
     /// A sorting clause can be given.\
     /// Limit and offset define the perimeter of the query result.
+    /// ## Example
+    /// ```ignore
+    /// DbEntity::<User>::find_all(
+    ///    db_conn,
+    ///    (
+    ///        "data->>'user_name'=$1",
+    ///        &["some_name"],
+    ///        Some(&["data->>'user_name' DESC"]),
+    ///        0,
+    ///        100,
+    ///    ),
+    /// );
+    /// ```
     pub async fn find_all(
         conn: &Connection,
         filter: Option<(&str, &[&(dyn ToSql + Sync)])>,
@@ -388,5 +397,35 @@ mod tests {
 
         assert_eq!(entity_status(&user_dbe), expected_status);
         assert_eq!(full_name(&user_dbe), expected_full_name);
+    }
+
+    #[test]
+    fn test_select_extra_columns() {
+        struct Test {
+            attr: String,
+        };
+
+        impl DbData for Test {
+            fn table_name() -> &'static str {
+                "intrared.test"
+            }
+
+            fn select_part() -> String {
+                format!(
+                    "{}, {}",
+                    select_part(Self::table_name(), None),
+                    "another_col"
+                )
+            }
+
+            fn pk_filter(&self) -> Vec<(&str, &(dyn ToSql + Sync))> {
+                vec![("attr", &self.attr as &(dyn ToSql + Sync))]
+            }
+        };
+        let t = Test {
+            attr: "attr".to_string(),
+        };
+
+        assert_eq!(Test::select_part(), t.select_part1());
     }
 }

@@ -46,7 +46,7 @@
 //!
 //! Using an imaginary "pgactix" database.
 //!
-//! ```rust,disable
+//! ```ignore
 //! use orma_derive::DbData;
 //! use serde_derive::Serialize;
 //! use orma::*;

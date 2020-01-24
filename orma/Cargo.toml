@@ -24,13 +24,6 @@ orma-derive = { version = "=0.1.2", optional = true, path = "../orma-derive" }
 [dev-dependencies]
 orma-derive = { version = "=0.1.2", path = "../orma-derive" }
 
-
-
-[profile.test]
-default = ["derive"]
-
-
-
 ### FEATURES #################################################################
 
 [features]

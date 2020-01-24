@@ -300,15 +300,15 @@ where
         self.target_table = Some(target_table);
         self
     }
-    /// The name of the source foregn key
+    /// The name of the source foreign key
     /// in the items table when you want to represents a simple join ( 1 to n )
     pub fn with_source_fk(mut self, source_fk: &'a str) -> Self {
         self.source_fk = Some(source_fk);
         self
     }
 
-    /// If you want to mape a m2n join, you provide the name of the db table with
-    /// name of the source foregn key
+    /// If you want to map a m2n join, you provide the name of the db table with
+    /// name of the source foreign key
     /// and the foreign key of the items table
     pub fn with_join_table(
         mut self,

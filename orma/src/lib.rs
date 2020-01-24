@@ -3,11 +3,11 @@
 )]
 //! # orma
 //!
-//! A PostgreSQL ORM wirtten in Rust language
+//! A PostgreSQL ORM written in Rust language
 //!
 //! ## Introduction
 //!
-//! When you feel the need to persist data as documents on PostgreSQL you often want a way to map these documens on structs.
+//! When you feel the need to persist data as documents on PostgreSQL you often want a way to map these documents on structs.
 //!
 //! If you have such needs and you are using PostgreSQL instead of other databases, it's probably because you also want all other cool stuff present in PostgreSQL.
 //!
@@ -33,7 +33,7 @@
 //! - _version_ is used for record versioning and prevents a record to be modified if version has changed in another session. orma takes care of record versioning OOTB.
 //! - _data_ is used to map the document and it's mapped over structs that implement _DbData_ trait.
 //!
-//! All structs that implement *DbData* trait need to be serializable too, as they'll be repersented as jsonb data in your db records.
+//! All structs that implement *DbData* trait need to be serializable too, as they'll be represented as jsonb data in your db records.
 //!
 //! While _DbData_ is mapped to _data_ column, _DbEntity_ is mapped over the three columns, and table, just described.
 //!
@@ -85,3 +85,8 @@ pub use db_anti_corruption::*;
 pub use dbentity::{DbData, DbEntity};
 pub use dbjoin::{DbJoin, JoinBuilder};
 pub use uuid::Uuid;
+
+#[cfg(feature = "derive")]
+pub mod derive {
+    pub use orma_derive::DbData;
+}

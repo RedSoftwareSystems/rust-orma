@@ -8,7 +8,7 @@ use std::ops::Deref;
 use uuid::Uuid;
 
 /// Helper function to create a SQL SELECT statement for a DbEntity table.
-/// This method reurns the (id, version, data) tuple
+/// This method returns the (id, version, data) tuple
 pub fn select_part(table_name: &str, alias: Option<&str>) -> String {
     let alias = if let Some(alias) = alias {
         format!("{}.", alias)
@@ -62,15 +62,15 @@ pub trait DbData {
     fn pk_filter(&self) -> Vec<(&str, &(dyn ToSql + Sync))>;
 }
 
-/// This struct isused to create a mapping for a data table.
+/// This struct is used to create a mapping for a data table.
 pub struct DbEntity<T>
 where
     T: DbData + Serialize + DeserializeOwned,
 {
-    /// This is the effective prmary key of the record. Its also used to buildrelations with other tables
+    /// This is the effective primary key of the record. Its also used to build relations with other tables
     pub id: Uuid,
     /// This field is used as a record check and identifies possible conflicts for parallel operations.
-    /// verion should always autoinc on record update
+    /// version should always autoinc on record update
     pub version: i32,
     /// The real information that a data table record is containing
     pub data: T,
@@ -80,7 +80,7 @@ impl<T> DbEntity<T>
 where
     T: DbData + Serialize + DeserializeOwned,
 {
-    /// Simplemetod used to create a new record
+    /// Simple method used to create a new record
     pub fn new(id: Uuid, version: i32, data: T) -> Self {
         Self { id, version, data }
     }
@@ -278,7 +278,7 @@ where
         }
     }
 
-    /// Searching all matching records defined by filtre clause (first element of the filter tuple)\
+    /// Searching all matching records defined by filter clause (first element of the filter tuple)\
     /// A sorting clause can be given.\
     /// Limit and offset define the perimeter of the query result.
     /// ## Example
@@ -373,7 +373,7 @@ mod tests {
     }
 
     #[test]
-    fn test_schema_instance_retrival() {
+    fn test_schema_instance_retrieval() {
         let user1 = User::new("user_name", "Jhon", "Doe");
 
         assert!(user1.table_name1() == User::table_name());

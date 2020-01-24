@@ -1,10 +1,10 @@
 # orma <img src="../orma.svg" alt="orma logo" height=26/>
 
-A PostgreSQL ORM wirtten in Rust language
+A PostgreSQL ORM written in Rust language
 
 ## Introduction
 
-When you feel the need to persist data as documents on PostgreSQL you often want a way to map these documens on structs.
+When you feel the need to persist data as documents on PostgreSQL you often want a way to map these documents on structs.
 
 If you have such needs and you are using PostgreSQL instead of other databases, it's probably because you also want all other cool stuff present in PostgreSQL.
 
@@ -21,7 +21,7 @@ If you have such needs and you are using PostgreSQL instead of other databases, 
 Orma is tested against a running instance of PostgreSQL.
 
 A docker image is provided to run the tests.
-If you don't want the docker image or you can't use it, or you need differet parameters,
+If you don't want the docker image or you can't use it, or you need different parameters,
 you can set the following environment variables and test the library on your own environment.
 
 - ORMA_DB_HOSTNAME (default: "localhost")
@@ -29,3 +29,8 @@ you can set the following environment variables and test the library on your own
 - ORMA_DB_NAME (default: "pgactix")
 - ORMA_DB_USERNAME (default: "pgactix")
 - ORMA_DB_PASSWORD (default: "pgactix")
+
+
+## Development
+
+When developing you will need to enable all the features of this crate, the simplest way is `cargo test --all-features`

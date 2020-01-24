@@ -1,20 +1,12 @@
 use orma::*;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[pk(name = "name")]
+#[table("intrared.groups")]
+#[derive(Serialize, Deserialize, orma::derive::DbData)]
 pub struct Group {
     pub name: String,
     pub description: Option<String>,
-}
-
-impl DbData for Group {
-    fn table_name() -> &'static str {
-        "intrared.groups"
-    }
-
-    fn pk_filter(&self) -> Vec<(&str, &(dyn ToSql + Sync))> {
-        vec![("name", &self.name as &(dyn ToSql + Sync))]
-    }
 }
 
 impl Group {

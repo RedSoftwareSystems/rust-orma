@@ -1,24 +1,17 @@
 use crate::group::Group;
 use orma::*;
+
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[pk(user_name = "user_name")]
+#[table("intrared.users")]
+#[derive(Serialize, Deserialize, derive::DbData)]
 pub struct User {
     pub user_id: Option<String>,
     pub first_name: String,
     pub last_name: String,
     pub email: String,
     pub user_name: String,
-}
-
-impl DbData for User {
-    fn table_name() -> &'static str {
-        "intrared.users"
-    }
-
-    fn pk_filter(&self) -> Vec<(&str, &(dyn ToSql + Sync))> {
-        vec![("user_name", &self.user_name as &(dyn ToSql + Sync))]
-    }
 }
 
 impl User {

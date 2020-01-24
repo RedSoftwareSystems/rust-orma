@@ -1,6 +1,6 @@
 [package]
 name = "orma"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Andrea Chiumenti <achiumenti@red.software.systems>"]
 edition = "2018"
 license = "MIT"
@@ -18,3 +18,21 @@ serde_derive = "1.0.104"
 futures = "0.3.1"
 tokio = { version = "0.2.10", features = [ "full" ] }
 uuid = { version = "0.8.1", features = ["serde", "v4"] }
+orma-derive = { version = "=0.1.2", optional = true, path = "../orma-derive" }
+
+
+[dev-dependencies]
+orma-derive = { version = "=0.1.2", path = "../orma-derive" }
+
+
+
+[profile.test]
+default = ["derive"]
+
+
+
+### FEATURES #################################################################
+
+[features]
+# Provide derive(Serialize, Deserialize) macros.
+derive = ["orma-derive"]

@@ -1,6 +1,7 @@
 [workspace]
 
 members = [
-    "orma",
     "orma-derive",
+    "orma",
+    "orma-mobc",
 ]

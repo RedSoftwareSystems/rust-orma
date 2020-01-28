@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 #[pk(user_name = "user_name")]
 #[table("intrared.users")]
-#[derive(Serialize, Deserialize, derive::DbData)]
+#[derive(Serialize, Deserialize, DbData)]
 pub struct User {
     pub user_id: Option<String>,
     pub first_name: String,

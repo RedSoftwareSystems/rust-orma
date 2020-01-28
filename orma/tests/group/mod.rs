@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 #[pk(name = "name")]
 #[table("intrared.groups")]
-#[derive(Serialize, Deserialize, orma::derive::DbData)]
+#[derive(Serialize, Deserialize, DbData)]
 pub struct Group {
     pub name: String,
     pub description: Option<String>,

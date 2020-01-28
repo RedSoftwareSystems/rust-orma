@@ -270,7 +270,7 @@ where
 {
     source: &'a DbEntity<A>,
     source_fk: Option<&'a str>,
-    target_table: Option<&'a str>, //target_table, source_fk
+    target_table: Option<&'a str>,
     join_table: Option<&'a str>,
     items_fk: Option<&'a str>,
     _items: Vec<DbEntity<B>>,

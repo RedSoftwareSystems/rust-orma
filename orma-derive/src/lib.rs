@@ -1,7 +1,7 @@
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/RedSoftwareSystems/rust-orma/master/orma.svg?sanitize=true"
 )]
-//! This crate provides Orma's derive macros.
+//! This crate provides derive macros for orma.
 //!
 //! # Example
 //!

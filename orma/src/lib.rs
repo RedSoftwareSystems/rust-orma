@@ -81,12 +81,11 @@ mod db_anti_corruption;
 mod dbentity;
 mod dbjoin;
 
+pub use db_anti_corruption::tls;
 pub use db_anti_corruption::*;
 pub use dbentity::{DbData, DbEntity};
 pub use dbjoin::{DbJoin, JoinBuilder};
 pub use uuid::Uuid;
 
 #[cfg(feature = "derive")]
-pub mod derive {
-    pub use orma_derive::DbData;
-}
+pub use orma_derive::DbData;

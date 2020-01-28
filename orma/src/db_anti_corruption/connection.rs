@@ -1,4 +1,4 @@
-use super::{DbError, Row, Statement, ToSql, ToStatement};
+use super::{DbError, Row, SimpleQueryMessage, Statement, ToSql, ToStatement};
 use tokio_postgres::Client;
 
 /// Wrapper over tokio_postgres::Client
@@ -83,6 +83,14 @@ impl Connection {
             .prepare(query)
             .await
             .map(Statement::from)
+            .map_err(DbError::from)
+    }
+
+    pub async fn simple_query(&self, query: &str) -> Result<Vec<SimpleQueryMessage>, DbError> {
+        self.client
+            .simple_query(query)
+            .await
+            .map(|rows| rows.into_iter().map(SimpleQueryMessage::from).collect())
             .map_err(DbError::from)
     }
 

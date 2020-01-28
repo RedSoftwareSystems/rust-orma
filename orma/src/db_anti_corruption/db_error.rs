@@ -6,12 +6,12 @@ pub struct DbError {
     /// Error description
     pub description: String,
     /// Optional error cause
-    pub cause: Option<Box<dyn Error>>,
+    pub cause: Option<Box<dyn Error + Sync + Send>>,
 }
 
 impl DbError {
     /// Simple constructor
-    pub fn new(description: &str, cause: Option<Box<dyn Error>>) -> Self {
+    pub fn new(description: &str, cause: Option<Box<dyn Error + Sync + Send>>) -> Self {
         Self {
             description: description.to_owned(),
             cause,

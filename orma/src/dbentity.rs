@@ -374,7 +374,7 @@ mod tests {
 
     #[test]
     fn test_schema_instance_retrieval() {
-        let user1 = User::new("user_name", "Jhon", "Doe");
+        let user1 = User::new("user_name", "John", "Doe");
 
         assert!(user1.table_name1() == User::table_name());
     }
@@ -388,7 +388,7 @@ mod tests {
             |entity: &DbEntity<User>| -> String { format!("{}:{}", entity.id, entity.version) };
 
         let uuid = Uuid::new_v4();
-        let data = User::new("user_name", "Jhon", "Doe");
+        let data = User::new("user_name", "John", "Doe");
 
         let expected_status = format!("{}:0", uuid);
         let expected_full_name = full_name(&data);

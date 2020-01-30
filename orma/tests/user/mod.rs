@@ -3,8 +3,8 @@ use orma::*;
 
 use serde::{Deserialize, Serialize};
 
-#[pk(user_name = "user_name")]
-#[table("intrared.users")]
+#[orma_pk(user_name = "user_name")]
+#[orma_table("intrared.users")]
 #[derive(Serialize, Deserialize, DbData)]
 pub struct User {
     pub user_id: Option<String>,

@@ -29,7 +29,7 @@ use proc_macro::TokenStream;
 
 use syn;
 
-#[proc_macro_derive(DbData, attributes(schema, table, pk))]
+#[proc_macro_derive(DbData, attributes(orma_table, orma_pk))]
 pub fn dbdata_macro_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).unwrap();
 

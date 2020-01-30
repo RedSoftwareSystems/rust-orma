@@ -5,6 +5,7 @@ use syn::{DeriveInput, Lit, Meta, MetaList, NestedMeta};
 enum AttributeType {
     Table,
     Pk,
+    Unknown,
 }
 
 struct PkItem {
@@ -28,9 +29,9 @@ impl From<&Ident> for AttributeType {
     fn from(ident: &Ident) -> Self {
         let str = format!("{}", ident);
         match str.as_str() {
-            "table" => AttributeType::Table,
-            "pk" => AttributeType::Pk,
-            _ => panic!("No valid conversion for AttributeType with \"{}\"", str),
+            "orma_table" => AttributeType::Table,
+            "orma_pk" => AttributeType::Pk,
+            _ => AttributeType::Unknown,
         }
     }
 }
@@ -112,26 +113,13 @@ fn field_attrs(ast: &DeriveInput) -> DbDataAttributes {
     let mut ctx = DbDataAttributes::default();
     for attr in &ast.attrs {
         let attr: Meta = attr.parse_meta().unwrap();
-        match attr {
-            Meta::Path(path) => {
-                let attr_type = AttributeType::from(path.get_ident().unwrap());
-                match attr_type {
-                    AttributeType::Table => ctx.table = Some(format!("{}", &ast.ident)),
-                    _ => panic!("Invalid attr syntax {:?}", path),
-                }
+        if let Meta::List(meta_list) = attr {
+            let attr_type = AttributeType::from(meta_list.path.get_ident().unwrap());
+            match attr_type {
+                AttributeType::Table => ctx.table = Some(attribute_string_val(&meta_list)),
+                AttributeType::Pk => ctx.pk = Some(attribute_pk(&meta_list)),
+                _ => (),
             }
-
-            // A structured list within an attribute, like `derive(Copy, Clone)`.
-            Meta::List(meta_list) => {
-                let attr_type = AttributeType::from(meta_list.path.get_ident().unwrap());
-                match attr_type {
-                    AttributeType::Table => ctx.table = Some(attribute_string_val(&meta_list)),
-                    AttributeType::Pk => ctx.pk = Some(attribute_pk(&meta_list)),
-                }
-            }
-
-            // A name-value pair within an attribute, like `feature = "nightly"`.
-            Meta::NameValue(meta_name_value) => panic!("Invalid attr syntax {:?}", meta_name_value),
         };
     }
     ctx

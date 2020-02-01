@@ -2,21 +2,23 @@ pub mod group;
 pub mod user;
 
 use group::*;
-use orma::*;
+use orma::{new_data, Connection, DbData, DbEntity, DbError};
 use std::env;
 use user::*;
 
-#[tokio::test]
-async fn test() {}
+pub const SQL_INIT: &str = include_str!("db_setup.sql");
 
-pub async fn create_connection() -> Connection {
+async fn create_connection(database: Option<&str>) -> Connection {
     let connection_string = format!(
-        "host={host} port={port} dbname={dbname} user={user} password={password}",
+        "host={host} port={port} {database} user={user} password={password}",
         host = env::var("ORMA_DB_HOSTNAME").unwrap_or_else(|_| "localhost".to_string()),
         port = env::var("ORMA_DB_PORT").unwrap_or_else(|_| "5433".to_string()),
-        dbname = env::var("ORMA_DB_NAME").unwrap_or_else(|_| "pgactix".to_string()),
-        user = env::var("ORMA_DB_USERNAME").unwrap_or_else(|_| "pgactix".to_string()),
-        password = env::var("ORMA_DB_PASSWORD").unwrap_or_else(|_| "pgactix".to_string()),
+        database = match database {
+            Some(database) => format!("dbname={}", database),
+            _ => "".to_string(),
+        },
+        user = env::var("ORMA_DB_USERNAME").unwrap_or_else(|_| "orma_test".to_string()),
+        password = env::var("ORMA_DB_PASSWORD").unwrap_or_else(|_| "orma_test".to_string()),
     );
     let (client, conn) = tokio_postgres::connect(&connection_string, tokio_postgres::NoTls)
         .await
@@ -24,49 +26,71 @@ pub async fn create_connection() -> Connection {
     tokio::spawn(conn);
     client.into()
 }
+async fn create_test_db(database: &str, conn: &Connection) {
+    conn.execute(
+        &format!("DROP DATABASE IF EXISTS {}", database) as &str,
+        &[],
+    )
+    .await
+    .unwrap();
+    conn.execute(&format!("CREATE DATABASE {}", database) as &str, &[])
+        .await
+        .unwrap();
+}
 
 pub async fn clear_tables(conn: &mut Connection) -> Result<(), DbError> {
     conn.transaction().await?;
-    conn.batch_execute("DELETE from intrared.users").await?;
-    conn.batch_execute("DELETE from intrared.groups").await?;
-    conn.batch_execute("DELETE from intrared.r_user_group")
-        .await?;
+    conn.batch_execute(
+        "
+        DELETE from intrared.users;
+        DELETE from intrared.groups;
+        DELETE from intrared.roles;
+    ",
+    )
+    .await?;
     conn.commit().await
 }
 
+async fn connection(database: &str) -> Connection {
+    let conn = create_connection(None).await;
+    create_test_db(database, &conn).await;
+    let conn = create_connection(Some(database)).await;
+    conn.batch_execute(SQL_INIT).await.unwrap();
+    conn
+}
+
 fn create_user(user_name: &str, email: &str) -> User {
-    User {
+    new_data!(User, {
         user_name: user_name.to_owned(),
         email: email.to_owned(),
         user_id: Some(user_name.to_owned()),
         first_name: String::from("FirstName"),
         last_name: String::from("LastName"),
-    }
+    })
 }
 
 fn create_group(name: &str, description: &str) -> Group {
-    Group {
+    new_data!(Group, {
         name: name.to_owned(),
         description: Some(description.to_owned()),
-    }
+    })
 }
 
-#[tokio::test]
-async fn test_user_crud() {
-    let mut conn = create_connection().await;
-
-    clear_tables(&mut conn).await.unwrap();
+#[orma::test]
+async fn test_user_crud(connection: Connection) {
+    let connection = connection.await;
 
     let user_name = "test_user_crud";
     let email = "test_user_crud@test.com";
 
     let user1 = create_user(user_name, email);
 
-    let user_entity = &mut DbEntity::from_data(user1, &conn).await.unwrap();
+    let mut user_entity = DbEntity::from_data(user1);
 
-    user_entity.insert(&conn).await.unwrap();
+    user_entity.insert(&connection).await.unwrap();
+    //assert_eq!(user_entity.id, user_entity.data.get_id().unwrap());
 
-    let find_result = User::find_by_user_name(&conn, &user_name).await;
+    let find_result = User::find_by_user_name(&connection, &user_name).await;
     assert!(
         find_result.is_ok(),
         format!("Failed to find user {}", &user_name)
@@ -76,9 +100,12 @@ async fn test_user_crud() {
         format!("User {} not found", &user_name)
     );
 
-    assert!(user_entity.delete(&conn).await.is_ok(), "Delete Failed");
+    assert!(
+        user_entity.delete(&connection).await.is_ok(),
+        "Delete Failed"
+    );
 
-    let find_after_delete_result = User::find_by_user_name(&conn, &user_name).await;
+    let find_after_delete_result = User::find_by_user_name(&connection, &user_name).await;
 
     assert!(
         find_after_delete_result.unwrap().is_none(),
@@ -86,10 +113,9 @@ async fn test_user_crud() {
     );
 }
 
-#[tokio::test]
-async fn test_group_crud() {
-    let mut conn = create_connection().await;
-
+#[orma::test]
+async fn test_group_crud(connection: Connection) {
+    let mut conn = connection.await;
     clear_tables(&mut conn).await.unwrap();
 
     let group_name = "test_group_crud";
@@ -97,7 +123,7 @@ async fn test_group_crud() {
 
     let group1 = create_group(group_name, group_description);
 
-    let group_entity = &mut DbEntity::from_data(group1, &conn).await.unwrap();
+    let mut group_entity = DbEntity::from_data(group1);
 
     group_entity.insert(&conn).await.unwrap();
 
@@ -121,9 +147,9 @@ async fn test_group_crud() {
     );
 }
 
-#[tokio::test]
-async fn test_user_group_join() {
-    let mut conn = create_connection().await;
+#[orma::test]
+async fn test_user_group_join(connection: Connection) {
+    let mut conn = connection.await;
     clear_tables(&mut conn).await.unwrap();
 
     let user_name = "test_user_group_join-user1";
@@ -131,7 +157,7 @@ async fn test_user_group_join() {
 
     let user1 = create_user(user_name, email);
 
-    let user_entity1 = &mut DbEntity::from_data(user1, &conn).await.unwrap();
+    let mut user_entity1 = DbEntity::from_data(user1);
 
     user_entity1.insert(&conn).await.unwrap();
 
@@ -140,7 +166,7 @@ async fn test_user_group_join() {
 
     let group1 = create_group(group_name1, group_description1);
 
-    let mut group_entity1 = DbEntity::from_data(group1, &conn).await.unwrap();
+    let mut group_entity1 = DbEntity::from_data(group1);
 
     group_entity1.insert(&conn).await.unwrap();
     conn.execute(
@@ -150,6 +176,7 @@ async fn test_user_group_join() {
     .await
     .unwrap();
 
+    println!("User entity id: {:?}", &user_entity1.data.id());
     let user1_groups = &mut user_groups(&user_entity1, &conn).await.unwrap();
 
     assert!(
@@ -171,13 +198,13 @@ async fn test_user_group_join() {
 
     let group2 = create_group(group_name2, group_description2);
 
-    let mut group_entity2 = DbEntity::from_data(group2, &conn).await.unwrap();
+    let mut group_entity2 = DbEntity::from_data(group2);
 
     group_entity2.insert(&conn).await.unwrap();
     user1_groups.items.push(group_entity2);
     user1_groups.save_items(&mut conn).await.unwrap();
     user1_groups.sorting = vec!["data->>'name'".to_owned()];
-    user1_groups.reload(&conn).await.unwrap();
+    user1_groups.fetch(&conn).await.unwrap();
     assert!(
         user1_groups.items.len() == 2,
         format!(
@@ -193,7 +220,7 @@ async fn test_user_group_join() {
         user1_groups.items.get(0).unwrap().data.name
     );
     user1_groups.sorting = vec!["data->>'name' DESC".to_owned()];
-    user1_groups.reload(&conn).await.unwrap();
+    user1_groups.fetch(&conn).await.unwrap();
     assert_eq!(
         user1_groups.items.get(0).unwrap().data.name,
         group_name2,

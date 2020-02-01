@@ -1,82 +1,62 @@
-use proc_macro2::{Ident, Literal, TokenStream};
-use quote::{quote, ToTokens};
-use syn::{DeriveInput, Lit, Meta, MetaList, NestedMeta};
+use core::ops::Deref;
+use proc_macro2::{Ident, Span, TokenStream};
+use quote::quote;
+use syn::parse::ParseStream;
 
+use syn::parse::Parse;
+use syn::*;
+
+#[derive(Debug)]
 enum AttributeType {
     Table,
-    Pk,
     Unknown,
 }
 
-struct PkItem {
-    column_name: Literal,
-    field_name: Ident,
-}
+struct NamedField(Field);
 
-impl ToTokens for PkItem {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        let (col_name, field_name) = (&self.column_name, &self.field_name);
-        tokens.extend(quote! { (#col_name, &self.#field_name) });
+impl Deref for NamedField {
+    type Target = Field;
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
+impl From<Field> for NamedField {
+    fn from(field: Field) -> Self {
+        Self(field)
+    }
+}
+
+impl Into<Field> for NamedField {
+    fn into(self) -> Field {
+        self.0
+    }
+}
+
+impl Parse for NamedField {
+    fn parse(input: ParseStream) -> Result<Self> {
+        Field::parse_named(input).map(NamedField::from)
+    }
+}
+
+#[derive(Debug)]
 struct DbDataAttributes {
     table: Option<String>,
-    pk: Option<Vec<PkItem>>,
 }
 
 impl From<&Ident> for AttributeType {
     fn from(ident: &Ident) -> Self {
-        let str = format!("{}", ident);
+        let str = ident.to_string();
         match str.as_str() {
-            "orma_table" => AttributeType::Table,
-            "orma_pk" => AttributeType::Pk,
+            "table" => AttributeType::Table,
             _ => AttributeType::Unknown,
         }
     }
 }
 
-pub fn impl_dbdata_macro(ast: &DeriveInput) -> TokenStream {
-    let name = &ast.ident;
-
-    let attrs = field_attrs(ast);
-    let table = attrs.table.unwrap_or_else(|| format!("{}", name));
-    let pk = attrs.pk.unwrap_or_else(|| vec![]);
-
-    let gen = quote! {
-        impl orma::DbData for #name {
-            fn table_name() -> &'static str {
-                #table
-            }
-            fn pk_filter(&self) -> Vec<(&str, &(dyn orma::ToSql + Sync))> {
-                vec![#(#pk),*]
-            }
-        }
-    };
-
-    gen
-}
-
 impl DbDataAttributes {
     fn default() -> Self {
-        Self {
-            table: None,
-            pk: None,
-        }
-    }
-}
-
-fn attribute_string_val(meta_list: &MetaList) -> String {
-    let name_token = meta_list.nested.first().unwrap();
-    match name_token {
-        NestedMeta::Lit(lit) => {
-            if let Lit::Str(lit_str) = lit {
-                lit_str.value()
-            } else {
-                panic!("table attribute should be a string")
-            }
-        }
-        _ => panic!("no value defined for macro attr"),
+        Self { table: None }
     }
 }
 
@@ -84,61 +64,82 @@ fn lit_string(lit: &Lit) -> String {
     if let Lit::Str(lit_str) = lit {
         lit_str.value()
     } else {
-        panic!("Invalid attr syntax {:?}", lit)
+        panic!("Invalid attr syntax {:?}", lit);
     }
 }
 
-fn kv_pk(kv_nested_meta: &NestedMeta) -> PkItem {
-    match kv_nested_meta {
-        NestedMeta::Meta(meta) => match meta {
-            Meta::NameValue(name_value) => PkItem {
-                field_name: name_value.path.get_ident().unwrap().clone(),
-                column_name: Literal::string(&lit_string(&name_value.lit)),
-            },
-            _ => panic!("Invalid attr syntax {:?}", kv_nested_meta),
-        },
-        _ => panic!("Invalid attr syntax {:?}", kv_nested_meta),
-    }
-}
-
-fn attribute_pk(meta_list: &MetaList) -> Vec<PkItem> {
-    meta_list
-        .nested
-        .iter()
-        .map(|kv_nested_meta| kv_pk(kv_nested_meta))
-        .collect()
-}
-
-fn field_attrs(ast: &DeriveInput) -> DbDataAttributes {
+fn parse_orma_attrs(attrs: &[NestedMeta]) -> DbDataAttributes {
     let mut ctx = DbDataAttributes::default();
-    for attr in &ast.attrs {
-        let attr: Meta = attr.parse_meta().unwrap();
-        if let Meta::List(meta_list) = attr {
-            let attr_type = AttributeType::from(meta_list.path.get_ident().unwrap());
-            match attr_type {
-                AttributeType::Table => ctx.table = Some(attribute_string_val(&meta_list)),
-                AttributeType::Pk => ctx.pk = Some(attribute_pk(&meta_list)),
-                _ => (),
+    for attr in attrs {
+        let meta = if let NestedMeta::Meta(meta) = attr {
+            meta
+        } else {
+            panic!("{:?} is not a Meta", attr);
+        };
+        if let Meta::NameValue(name_value) = meta {
+            let attr_type = AttributeType::from(name_value.path.get_ident().unwrap());
+            if let AttributeType::Table = attr_type {
+                ctx.table = Some(lit_string(&name_value.lit))
             }
         };
     }
     ctx
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use proc_macro2::Span;
-    use std::str::FromStr;
-    #[test]
-    fn test_pk_to_token() {
-        let pk = PkItem {
-            column_name: Literal::string("column_name"),
-            field_name: Ident::new("field_name", Span::call_site()),
-        };
+pub fn impl_orma(attrs: &[NestedMeta], input: &mut DeriveInput) -> TokenStream {
+    let dbdata_attrs = parse_orma_attrs(attrs);
+    let table_name = if let Some(table_name) = dbdata_attrs.table {
+        table_name
+    } else {
+        panic!("No table name provided, {:?}", attrs);
+    };
+    let data = if let Data::Struct(ref mut it) = input.data {
+        it
+    } else {
+        return Error::new(input.ident.span(), "Only structs are supported").to_compile_error();
+    };
 
-        let expected = TokenStream::from_str("(\"column_name\", &self.field_name)").unwrap();
+    let fields = if let Fields::Named(ref mut it) = data.fields {
+        it
+    } else {
+        return Error::new(input.ident.span(), "Tuple structs are not supported")
+            .to_compile_error();
+    };
 
-        assert_eq!(format!("{}", expected), format!("{}", pk.to_token_stream()));
+    let skip: Attribute = parse_quote! {#[serde(skip)]};
+    fields.named.push(Field {
+        attrs: vec![skip],
+        vis: parse_quote! {pub},
+        ident: Some(Ident::new("orma_id", Span::call_site())),
+        colon_token: None,
+        ty: parse_quote! {Option<::uuid::Uuid>},
+    });
+
+    let skip: Attribute = parse_quote! {#[serde(skip)]};
+    fields.named.push(Field {
+        attrs: vec![skip],
+        vis: parse_quote! {pub},
+        ident: Some(Ident::new("orma_version", Span::call_site())),
+        colon_token: None,
+        ty: parse_quote! {Option<i32>},
+    });
+
+    let ident = &input.ident;
+    quote! {
+        #input
+        impl ::orma::DbData for #ident {
+            fn table_name() -> &'static str {
+                #table_name
+            }
+            fn id(&self) -> Option<::uuid::Uuid> {self.orma_id}
+            fn version(&self) -> Option<i32> {self.orma_version}
+            fn set_id(&mut self, uuid: ::uuid::Uuid) {
+                self.orma_id = Some(uuid);
+            }
+            fn set_version(&mut self, version: i32) {
+                self.orma_version = Some(version);
+            }
+
+        }
     }
 }

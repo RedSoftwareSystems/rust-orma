@@ -1,5 +1,4 @@
-use crate::db_anti_corruption::Connection;
-use crate::*;
+use crate::{db_anti_corruption::Connection, DbError, Row, ToSql};
 
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -9,14 +8,19 @@ use uuid::Uuid;
 
 /// Helper function to create a SQL SELECT statement for a DbEntity table.
 /// This method returns the (id, version, data) tuple
-pub fn select_part(table_name: &str, alias: Option<&str>) -> String {
-    let alias = if let Some(alias) = alias {
-        format!("{}.", alias)
+pub fn select_part(table_name: &str, distinct: bool, alias: Option<&str>) -> String {
+    let (alias, table_name) = if let Some(alias) = alias {
+        (format!("{}.", alias), format!("{} {}", table_name, alias))
     } else {
-        "".to_owned()
+        ("".to_owned(), table_name.to_owned())
     };
     format!(
-        "SELECT {alias}id, {alias}version, {alias}data FROM {table_name}",
+        "{select} {alias}id, {alias}version, {alias}data FROM {table_name}",
+        select = if distinct {
+            "SELECT DISTINCT"
+        } else {
+            "SELECT"
+        },
         table_name = table_name,
         alias = alias
     )
@@ -49,7 +53,7 @@ pub trait DbData {
     }
     /// Convenience function that returns the select part for the associated db table.
     fn select_part() -> String {
-        select_part(Self::table_name(), None)
+        select_part(Self::table_name(), false, None)
     }
 
     /// Select part from instance
@@ -57,9 +61,13 @@ pub trait DbData {
         Self::select_part()
     }
 
-    /// In a data table each record is unique by at least a set of keys present in its data column.\n
-    /// This pk is used to retrieve the id and version of the table record.
-    fn pk_filter(&self) -> Vec<(&str, &(dyn ToSql + Sync))>;
+    /// returns the "id" column of the db row (same as DbEntity::id). If the DbData is not connected to the db, then result is None
+    fn id(&self) -> Option<Uuid>;
+    /// returns the "version" column of the db row (same as DbEntity::version). If the DbData is not connected to the db, then result is None
+    fn version(&self) -> Option<i32>;
+
+    fn set_id(&mut self, uuid: Uuid);
+    fn set_version(&mut self, version: i32);
 }
 
 /// This struct is used to create a mapping for a data table.
@@ -85,68 +93,20 @@ where
         Self { id, version, data }
     }
 
-    pub async fn find_table_id_and_version_from_data(
-        data: &T,
-        conn: &Connection,
-    ) -> Result<Option<(Uuid, i32)>, DbError> {
-        let pk_filter = data.pk_filter();
-        let pk_len = pk_filter.len();
-        let (_, where_clauses, where_values): (u32, String, Vec<&(dyn ToSql + Sync)>) =
-            pk_filter.into_iter().fold(
-                (
-                    0,
-                    String::from(""),
-                    Vec::<&(dyn ToSql + Sync)>::with_capacity(pk_len),
-                ),
-                |(c, where_str, mut where_values), kv| {
-                    where_values.push(kv.1);
-                    (
-                        { c + 1 },
-                        format!(
-                            "{} {} data->>'{}' = ${}",
-                            where_str,
-                            if c == 0 { "" } else { " AND " },
-                            kv.0,
-                            c + 1
-                        ),
-                        where_values,
-                    )
-                },
-            );
-
-        let prepared_s = conn
-            .prepare(&format!(
-                "SELECT id, version FROM {table} WHERE {where_clause}",
-                table = T::table_name(),
-                where_clause = where_clauses
-            ))
-            .await?;
-        let result = conn.query(&prepared_s, &where_values[..]).await?;
-        if result.is_empty() {
-            Ok(None)
-        } else {
-            let row = &result.get(0).unwrap();
-            let uuid: Uuid = row.get(0);
-            let version: i32 = row.get(1);
-            Ok(Some((uuid, version)))
-        }
-    }
-
     /// Given a data this method uses DbData#find_table_id_and_version to find a possible candidate for record or creates
     /// a new one that will need to be persisted with the insert method.
-    pub async fn from_data<'a>(data: T, conn: &Connection) -> Result<Self, DbError> {
-        let uuid_and_version = Self::find_table_id_and_version_from_data(&data, conn).await?;
-        match uuid_and_version {
-            Some((uuid, version)) => Ok(Self {
+    pub fn from_data(data: T) -> Self {
+        match (data.id(), data.version()) {
+            (Some(uuid), Some(version)) => Self {
                 id: uuid,
                 version,
                 data,
-            }),
-            None => Ok(Self {
+            },
+            _ => Self {
                 id: Uuid::new_v4(),
                 version: 0,
                 data,
-            }),
+            },
         }
     }
 
@@ -154,9 +114,11 @@ where
     pub fn from_row(row: &Row) -> Result<Self, DbError> {
         let uuid: Uuid = row.get(0);
         let version: i32 = row.get(1);
-        let data: T = serde_json::from_value(row.get::<_, serde_json::Value>(2))
+        let mut data: T = serde_json::from_value(row.get::<_, serde_json::Value>(2))
             .map_err(DbError::from)
             .unwrap();
+        data.set_id(uuid);
+        data.set_version(version);
         Ok(DbEntity::new(uuid, version, data))
     }
 
@@ -194,6 +156,8 @@ where
         )
         .await?;
         self.version += 1;
+        self.data.set_id(self.id.clone());
+        self.data.set_version(self.version);
         Ok(())
     }
 
@@ -223,6 +187,7 @@ where
             == 1;
         if updated {
             self.version += 1;
+            self.data.set_version(self.version);
             Ok(())
         } else {
             Err(self.out_of_sync_err())
@@ -340,6 +305,7 @@ where
         &self.data
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -356,10 +322,15 @@ mod tests {
         fn table_name() -> &'static str {
             "intrared.users"
         }
-
-        fn pk_filter(&self) -> Vec<(&str, &(dyn ToSql + Sync))> {
-            vec![("user_name", &self.user_name as &(dyn ToSql + Sync))]
+        fn id(&self) -> Option<Uuid> {
+            None
         }
+
+        fn version(&self) -> Option<i32> {
+            None
+        }
+        fn set_id(&mut self, _uuid: Uuid) {}
+        fn set_version(&mut self, _version: i32) {}
     }
 
     impl User {
@@ -401,9 +372,7 @@ mod tests {
 
     #[test]
     fn test_select_extra_columns() {
-        struct Test {
-            attr: String,
-        };
+        struct Test {};
 
         impl DbData for Test {
             fn table_name() -> &'static str {
@@ -413,18 +382,22 @@ mod tests {
             fn select_part() -> String {
                 format!(
                     "{}, {}",
-                    select_part(Self::table_name(), None),
+                    select_part(Self::table_name(), false, None),
                     "another_col"
                 )
             }
 
-            fn pk_filter(&self) -> Vec<(&str, &(dyn ToSql + Sync))> {
-                vec![("attr", &self.attr as &(dyn ToSql + Sync))]
+            fn id(&self) -> Option<Uuid> {
+                None
             }
+
+            fn version(&self) -> Option<i32> {
+                None
+            }
+            fn set_id(&mut self, _uuid: Uuid) {}
+            fn set_version(&mut self, _version: i32) {}
         };
-        let t = Test {
-            attr: "attr".to_string(),
-        };
+        let t = Test {};
 
         assert_eq!(Test::select_part(), t.select_part1());
     }

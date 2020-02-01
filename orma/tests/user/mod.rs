@@ -3,9 +3,8 @@ use orma::*;
 
 use serde::{Deserialize, Serialize};
 
-#[orma_pk(user_name = "user_name")]
-#[orma_table("intrared.users")]
-#[derive(Serialize, Deserialize, DbData)]
+#[orma_obj(table = "intrared.users")]
+#[derive(Serialize, Deserialize)]
 pub struct User {
     pub user_id: Option<String>,
     pub first_name: String,
@@ -38,10 +37,10 @@ pub async fn user_groups(
     user: &DbEntity<User>,
     db_conn: &Connection,
 ) -> Result<DbJoin<Group>, DbError> {
-    JoinBuilder::new(user)
+    JoinBuilder::new(&user.data)
         .with_join_table("intrared.r_user_group", "id_user", "id_group")
         .with_target(Group::table_name())
         .with_sorting(&["data->>'name'"])
-        .build(db_conn)
+        .build(db_conn, true)
         .await
 }

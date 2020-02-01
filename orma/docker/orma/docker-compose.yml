@@ -1,0 +1,10 @@
+version: "3.4"
+
+services:
+  db:
+    image: postgres:12
+    environment:
+      - POSTGRES_USER=orma_test
+      - POSTGRES_PASSWORD=orma_test
+    ports:
+      - 5433:5432

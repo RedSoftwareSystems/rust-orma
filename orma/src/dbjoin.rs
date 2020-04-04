@@ -44,17 +44,32 @@ impl<A> DbJoin<A>
 where
     A: DbData + Serialize + DeserializeOwned,
 {
-    async fn load_items_simple_join(&self, conn: &Connection) -> Result<Vec<DbEntity<A>>, DbError> {
+    async fn load_items_simple_join(
+        &self,
+        conn: &Connection,
+        filter: Option<(&str, &[&(dyn ToSql + Sync)])>,
+    ) -> Result<Vec<DbEntity<A>>, DbError> {
         let qry = format!(
-            "{B}, {source_table} a WHERE a.id = b.{a_fk} AND a.id = $1{order_by}",
-            B = dbentity::select_part(&self.target_table, false, Some("b")),
+            "{A}, {source_table} b WHERE b.id = a.{b_fk}
+            {filter}
+            AND b.id = ${id_index}
+            {order_by}",
+            A = dbentity::select_part(&self.target_table, false, Some("a")),
             source_table = &self.source_table,
-            a_fk = &self.source_fk,
+            b_fk = &self.source_fk,
+            filter = match filter {
+                Some((filter, _)) => format!("AND {}", filter.to_string()),
+                _ => "".to_string(),
+            },
+            id_index = match filter {
+                Some((_, filter)) => filter.len() + 1,
+                _ => 1,
+            },
             order_by = if !self.sorting.is_empty() {
                 let order_by: Vec<&str> = self.sorting.iter().map(|x| x.as_ref()).collect();
                 format!(
                     " ORDER BY {}",
-                    dbentity::make_sort_statement(&order_by[..], None)
+                    dbentity::make_sort_statement(&order_by[..], Some("a"))
                 )
             } else {
                 "".to_string()
@@ -62,37 +77,96 @@ where
         );
         let p_statement = conn.prepare(&qry).await?;
         let id = id_from_str(&self.source_id)?;
-        let result = conn.query(&p_statement, &[&id]).await?;
-        Ok(DbEntity::from_rows(&result).unwrap())
+        match filter {
+            Some((_, filter_val)) => {
+                let mut filter = filter_val.to_vec();
+                let filter_id: Vec<&(dyn ToSql + Sync)> = vec![&id];
+                filter.extend(filter_id.iter());
+
+                let result = conn.query(&p_statement, &filter).await?;
+                Ok(DbEntity::from_rows(&result)?)
+            }
+            _ => {
+                let result = conn.query(&p_statement, &[&id]).await?;
+                Ok(DbEntity::from_rows(&result)?)
+            }
+        }
     }
 
-    async fn load_items_table_join(&self, conn: &Connection) -> Result<Vec<DbEntity<A>>, DbError> {
+    async fn load_items_table_join(
+        &self,
+        conn: &Connection,
+        filter: Option<(&str, &[&(dyn ToSql + Sync)])>,
+    ) -> Result<Vec<DbEntity<A>>, DbError> {
         let qry = format!(
-                        "{B}, {join_table} ab, {source_table} a WHERE b.id = ab.{b_fk} AND a.id = ab.{a_fk} AND a.id = $1{order_by}",
-                        B = dbentity::select_part(&self.target_table, false, Some("b")),
-                        join_table = self.join_table.as_ref().unwrap(),
-                        source_table = self.source_table,
-                        b_fk = self.items_fk.as_ref().unwrap(),
-                        a_fk = self.source_fk,
-                        order_by = if !self.sorting.is_empty() {
-                            let order_by: Vec<&str> = self.sorting.iter().map(|x| x.as_ref()).collect();
-                            format!(" ORDER BY {}",
-                            dbentity::make_sort_statement(&order_by[..], Some("b")))
-                        } else {
-                            "".to_string()
-                        }
-                    );
+            "{A}, {join_table} ab, {source_table} b WHERE a.id = ab.{a_fk} AND b.id = ab.{b_fk}
+                        {filter}
+                        AND b.id = ${id_index}
+                        {order_by}",
+            A = dbentity::select_part(&self.target_table, false, Some("a")),
+            join_table = self.join_table.as_ref().unwrap(),
+            source_table = self.source_table,
+            a_fk = self.items_fk.as_ref().unwrap(),
+            b_fk = self.source_fk,
+            filter = match filter {
+                Some((filter, _)) => format!("AND {}", filter.to_string()),
+                _ => "".to_string(),
+            },
+            id_index = match filter {
+                Some((_, filter)) => filter.len() + 1,
+                _ => 1,
+            },
+            order_by = if !self.sorting.is_empty() {
+                let order_by: Vec<&str> = self.sorting.iter().map(|x| x.as_ref()).collect();
+                format!(
+                    " ORDER BY {}",
+                    dbentity::make_sort_statement(&order_by[..], Some("a"))
+                )
+            } else {
+                "".to_string()
+            }
+        );
+
         let p_statement = conn.prepare(&qry).await?;
         let id = id_from_str(&self.source_id)?;
-        let result = conn.query(&p_statement, &[&id]).await?;
-        Ok(DbEntity::from_rows(&result).unwrap())
+        match filter {
+            Some((_, filter_val)) => {
+                let mut filter = filter_val.to_vec();
+                let filter_id: Vec<&(dyn ToSql + Sync)> = vec![&id];
+                filter.extend(filter_id.iter());
+
+                let result = conn.query(&p_statement, &filter).await?;
+                Ok(DbEntity::from_rows(&result)?)
+            }
+            _ => {
+                let result = conn.query(&p_statement, &[&id]).await?;
+                Ok(DbEntity::from_rows(&result)?)
+            }
+        }
     }
 
     /// This method fetches items field for the given join using the current sorting field.
     pub async fn fetch(&mut self, conn: &Connection) -> Result<(), DbError> {
         self.items = match (self.join_table.as_ref(), self.items_fk.as_ref()) {
-            (Some(_join_table), Some(_items_fk)) => self.load_items_table_join(conn).await?,
-            _ => self.load_items_simple_join(conn).await?,
+            (Some(_join_table), Some(_items_fk)) => self.load_items_table_join(conn, None).await?,
+            _ => self.load_items_simple_join(conn, None).await?,
+        };
+        Ok(())
+    }
+
+    /// This method fetches items field for the given join using the current sorting field.
+    /// Filter is a tuple with the query filter and its values.
+    /// The target table is aliased with "a" name so a query filter could be `"a.data->>'name' LIKE $1"`
+    pub async fn fetch_filtered(
+        &mut self,
+        conn: &Connection,
+        filter: (&str, &[&(dyn ToSql + Sync)]),
+    ) -> Result<(), DbError> {
+        self.items = match (self.join_table.as_ref(), self.items_fk.as_ref()) {
+            (Some(_join_table), Some(_items_fk)) => {
+                self.load_items_table_join(conn, Some(filter)).await?
+            }
+            _ => self.load_items_simple_join(conn, Some(filter)).await?,
         };
         Ok(())
     }
@@ -331,8 +405,8 @@ where
     }
 
     /// Creates the DbJoin object and fetches the data
-    pub async fn build(&self, conn: &'a Connection, fetch: bool) -> Result<DbJoin<B>, DbError> {
-        let mut join = DbJoin {
+    pub fn build(&self) -> DbJoin<B> {
+        DbJoin {
             source_table: A::table_name().to_string(),
             source_id: format!("{}", self.source.id().expect("no id for source")),
             source_fk: self.source_fk.expect("no source_fk defined").to_string(),
@@ -348,10 +422,6 @@ where
                 .map(|&item| item.to_string())
                 .collect::<Vec<String>>(),
             items: Vec::<DbEntity<B>>::new(),
-        };
-        if fetch {
-            join.fetch(conn).await?;
         }
-        Ok(join)
     }
 }

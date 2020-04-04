@@ -3,6 +3,7 @@ use mobc::Manager;
 use orma::tls::{MakeTlsConnect, TlsConnect};
 use orma::{Config, Connection, DbError, Socket};
 
+#[allow(clippy::needless_doctest_main)]
 /// A `mobc::Manager` for `orma::Connection`s.
 /// This crate is a strict derivation of [mobc-postgres](https://github.com/importcjj/mobc-postgres/)
 ///

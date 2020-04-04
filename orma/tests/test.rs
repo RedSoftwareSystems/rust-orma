@@ -228,4 +228,16 @@ async fn test_user_group_join(connection: Connection) {
         group_name2,
         user1_groups.items.get(0).unwrap().data.name
     );
+
+    user1_groups
+        .fetch_filtered(&conn, ("a.data->>'name' = $1", &[&group_name2]))
+        .await
+        .unwrap();
+    assert!(
+        user1_groups.items.len() == 1,
+        format!(
+            "User should have just 1 associated groups. {} groups where found.",
+            user1_groups.items.len()
+        )
+    );
 }

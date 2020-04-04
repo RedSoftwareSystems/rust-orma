@@ -4,7 +4,10 @@ use tokio_postgres::Client;
 /// Wrapper over tokio_postgres::Client
 /// ## Example
 /// ```edition2018
-/// fn create_connection() -> Connection {
+///  use std::env;
+///  use orma::{Connection};
+///
+/// async fn create_connection() -> Connection {
 ///     let connection_string = format!(
 ///         "host={host} port={port} dbname={dbname} user={user} password={password}",
 ///         host = &env::var("INTRARED_DB_HOSTNAME").unwrap_or_else(|_| "localhost".to_string()),

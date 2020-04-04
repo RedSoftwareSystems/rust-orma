@@ -1,6 +1,6 @@
 [package]
 name = "orma-derive"
-version = "0.1.4"
+version = "0.2.0"
 authors = ["Andrea Chiumenti <achiumenti@red.software.systems>"]
 edition = "2018"
 license = "MIT"
@@ -14,10 +14,14 @@ categories = ["database"]
 proc_macro = true
 
 [dependencies]
-syn = { version = "1.0.14", features = ["extra-traits"]}
+syn = { version = "1.0.15", features = ["extra-traits", "full"]}
 proc-macro2 = "1.0.8"
 quote = "1.0.2"
+
 
 [dev-dependencies]
 serde = "1.0.104"
 serde_derive = "1.0.104"
+uuid = "0.8.1"
+tokio = { version = "0.2.11", features = [ "full" ] }
+orma = { path = "../orma"}

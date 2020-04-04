@@ -83,9 +83,20 @@ mod dbjoin;
 
 pub use db_anti_corruption::tls;
 pub use db_anti_corruption::*;
-pub use dbentity::{DbData, DbEntity};
+pub use dbentity::{select_part, DbData, DbEntity};
 pub use dbjoin::{DbJoin, JoinBuilder};
 pub use uuid::Uuid;
 
+#[macro_export]
+macro_rules! new_data {
+    ($the_struct:ident, {$($body:tt)*}) => {
+        $the_struct {
+            orma_id: None,
+            orma_version: None,
+            $($body)*
+        }
+    }
+}
+
 #[cfg(feature = "derive")]
-pub use orma_derive::DbData;
+pub use orma_derive::*;

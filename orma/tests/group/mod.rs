@@ -1,9 +1,8 @@
 use orma::*;
 use serde::{Deserialize, Serialize};
 
-#[orma_pk(name = "name")]
-#[orma_table("intrared.groups")]
-#[derive(Serialize, Deserialize, DbData)]
+#[orma_obj(table = "intrared.groups")]
+#[derive(Serialize, Deserialize)]
 pub struct Group {
     pub name: String,
     pub description: Option<String>,

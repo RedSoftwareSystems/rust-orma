@@ -1,16 +1,10 @@
 use crate::db_anti_corruption::Connection;
 use crate::*;
-use futures::{future::join_all, try_join};
 
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use tokio_postgres::types::ToSql;
 use uuid::Uuid;
-
-fn id_from_str(id: &str) -> Result<Uuid, DbError> {
-    Uuid::parse_str(&id)
-        .map_err(|e| DbError::new(&format!("Unable to parse, {} id", id), Some(Box::new(e))))
-}
 
 /// This struct is used to create a join between DbEntyty elements
 /// and JoinBuilder is used to create a DbJoin instance.
@@ -26,11 +20,15 @@ where
     A: DbData + Serialize + DeserializeOwned,
 {
     source_table: String,
-    source_id: String,
+    source_id: Uuid,
     source_fk: String,
     target_table: String,
     join_table: Option<String>,
     items_fk: Option<String>,
+    /// The offset of the extracted query join
+    pub offset: i64,
+    /// The limit of the extracted query join. If limit is negative it means "no limit"
+    pub limit: i64,
     /// Used to provide a sorting method on data fetching.
     /// ```rust
     /// vec!["data->>'first_name'", "data->>'last_name' DESC"];
@@ -53,7 +51,7 @@ where
             "{A}, {source_table} b WHERE b.id = a.{b_fk}
             {filter}
             AND b.id = ${id_index}
-            {order_by}",
+            {order_by}{offset}{limit}",
             A = dbentity::select_part(&self.target_table, false, Some("a")),
             source_table = &self.source_table,
             b_fk = &self.source_fk,
@@ -73,21 +71,51 @@ where
                 )
             } else {
                 "".to_string()
-            }
+            },
+            offset = format!(
+                " OFFSET ${}",
+                match filter {
+                    Some(filter) => filter.1.len() + 2,
+                    None => 2,
+                }
+            ),
+            limit = if self.limit < 0 {
+                "".to_string()
+            } else {
+                format!(
+                    " LIMIT ${}",
+                    match filter {
+                        Some(filter) => filter.1.len() + 3,
+                        None => 1,
+                    }
+                )
+            },
         );
         let p_statement = conn.prepare(&qry).await?;
-        let id = id_from_str(&self.source_id)?;
+        let id = self.source_id;
         match filter {
             Some((_, filter_val)) => {
                 let mut filter = filter_val.to_vec();
                 let filter_id: Vec<&(dyn ToSql + Sync)> = vec![&id];
                 filter.extend(filter_id.iter());
-
+                filter.push(&self.offset as &(dyn ToSql + Sync));
+                if self.limit >= 0 {
+                    filter.push(&self.limit as &(dyn ToSql + Sync));
+                }
                 let result = conn.query(&p_statement, &filter).await?;
                 Ok(DbEntity::from_rows(&result)?)
             }
             _ => {
-                let result = conn.query(&p_statement, &[&id]).await?;
+                let filter: Vec<&(dyn ToSql + Sync)> = if self.limit < 0 {
+                    vec![&id, &self.offset as &(dyn ToSql + Sync)]
+                } else {
+                    vec![
+                        &id,
+                        &self.offset as &(dyn ToSql + Sync),
+                        &self.limit as &(dyn ToSql + Sync),
+                    ]
+                };
+                let result = conn.query(&p_statement, &filter).await?;
                 Ok(DbEntity::from_rows(&result)?)
             }
         }
@@ -102,7 +130,7 @@ where
             "{A}, {join_table} ab, {source_table} b WHERE a.id = ab.{a_fk} AND b.id = ab.{b_fk}
                         {filter}
                         AND b.id = ${id_index}
-                        {order_by}",
+                        {order_by}{offset}{limit}",
             A = dbentity::select_part(&self.target_table, false, Some("a")),
             join_table = self.join_table.as_ref().unwrap(),
             source_table = self.source_table,
@@ -124,22 +152,52 @@ where
                 )
             } else {
                 "".to_string()
-            }
+            },
+            offset = format!(
+                " OFFSET ${}",
+                match filter {
+                    Some(filter) => filter.1.len() + 2,
+                    None => 2,
+                }
+            ),
+            limit = if self.limit < 0 {
+                "".to_string()
+            } else {
+                format!(
+                    " LIMIT ${}",
+                    match filter {
+                        Some(filter) => filter.1.len() + 3,
+                        None => 1,
+                    }
+                )
+            },
         );
 
         let p_statement = conn.prepare(&qry).await?;
-        let id = id_from_str(&self.source_id)?;
+        let id = self.source_id;
         match filter {
             Some((_, filter_val)) => {
                 let mut filter = filter_val.to_vec();
                 let filter_id: Vec<&(dyn ToSql + Sync)> = vec![&id];
                 filter.extend(filter_id.iter());
-
+                filter.push(&self.offset as &(dyn ToSql + Sync));
+                if self.limit >= 0 {
+                    filter.push(&self.limit as &(dyn ToSql + Sync));
+                }
                 let result = conn.query(&p_statement, &filter).await?;
                 Ok(DbEntity::from_rows(&result)?)
             }
             _ => {
-                let result = conn.query(&p_statement, &[&id]).await?;
+                let filter: Vec<&(dyn ToSql + Sync)> = if self.limit < 0 {
+                    vec![&id, &self.offset as &(dyn ToSql + Sync)]
+                } else {
+                    vec![
+                        &id,
+                        &self.offset as &(dyn ToSql + Sync),
+                        &self.limit as &(dyn ToSql + Sync),
+                    ]
+                };
+                let result = conn.query(&p_statement, &filter).await?;
                 Ok(DbEntity::from_rows(&result)?)
             }
         }
@@ -171,127 +229,182 @@ where
         Ok(())
     }
 
-    async fn save_items_table_join(
-        &self,
-        join_table: &str,
-        items_fk: &str,
+    async fn remove_items_table_join(
+        &mut self,
         conn: &Connection,
+        items: Option<&[DbEntity<A>]>,
     ) -> Result<(), DbError> {
-        let delete_sql = format!(
-            "DELETE FROM {join_table} WHERE {a_fk} = $1",
-            join_table = &join_table,
-            a_fk = self.source_fk
-        );
+        let delete_sql = match items {
+            Some(_) => format!(
+                "DELETE FROM {join_table} WHERE {items_fk} = ANY($1)",
+                join_table = self
+                    .join_table
+                    .as_ref()
+                    .ok_or_else(|| DbError::new("No join_table defined", None))?,
+                items_fk = self
+                    .items_fk
+                    .as_ref()
+                    .ok_or_else(|| DbError::new("No items_fk defined", None))?,
+            ),
+            None => format!(
+                "DELETE FROM {join_table} WHERE {source_fk} = $1",
+                join_table = self
+                    .join_table
+                    .as_ref()
+                    .ok_or_else(|| DbError::new("No join_table defined", None))?,
+                source_fk = self.source_fk
+            ),
+        };
 
-        let delete_qry = conn.prepare(&delete_sql);
+        let delete_qry = conn.prepare(&delete_sql).await?;
 
-        let insert_val_sql = format!(
-            "INSERT INTO {table_name} ({a_fk}, {b_fk}) VALUES ($1, $2)",
-            table_name = &join_table,
-            b_fk = &items_fk,
-            a_fk = self.source_fk
-        );
-        let insert_val_qry = conn.prepare(&insert_val_sql);
-
-        let (delete_qry, insert_val_qry) = try_join!(delete_qry, insert_val_qry)?;
-
-        let id = id_from_str(&self.source_id)?;
-        conn.execute(&delete_qry, &[&id]).await?;
-
-        let params_owned: Vec<Vec<Uuid>> = self
-            .items
-            .iter()
-            .map(|db_entity| {
-                vec![
-                    Uuid::parse_str(&self.source_id).unwrap(),
-                    Uuid::parse_str(&format!("{}", db_entity.id)).unwrap(),
-                ]
-            })
-            .collect();
-
-        let params: Vec<Vec<_>> = params_owned
-            .iter()
-            .map(|inner_vec| {
-                inner_vec
+        match items {
+            Some(items) => {
+                let ids_to_remove: Vec<Uuid> = items
                     .iter()
-                    .map(|uuid_ref| uuid_ref as &(dyn ToSql + Sync))
-                    .collect()
-            })
-            .collect();
+                    .map(|item| -> Result<Uuid, DbError> {
+                        item.id()
+                            .ok_or_else(|| DbError::new("Item not persisted. No ID defined!", None))
+                    })
+                    .collect::<Result<Vec<Uuid>, DbError>>()?;
+                conn.execute(&delete_qry, &[&ids_to_remove]).await?;
+            }
+            None => {
+                let id = self.source_id;
+                conn.execute(&delete_qry, &[&id]).await?;
+            }
+        };
 
-        join_all(
-            params
-                .iter()
-                .map(|q_params| conn.execute(&insert_val_qry, &q_params[..])),
-        )
-        .await;
         Ok(())
     }
 
-    async fn save_items_simple_join(&self, conn: &Connection) -> Result<(), DbError> {
+    async fn add_items_table_join(
+        &mut self,
+        conn: &Connection,
+        items: &[DbEntity<A>],
+    ) -> Result<(), DbError> {
+        let insert_val_sql = format!(
+            "INSERT INTO {table_name} ({a_fk}, {b_fk}) VALUES {values} ON CONFLICT DO NOTHING",
+            table_name = self
+                .join_table
+                .as_ref()
+                .ok_or_else(|| DbError::new("No join_table defined", None))?
+                .to_string(),
+            b_fk = self
+                .items_fk
+                .as_ref()
+                .ok_or_else(|| DbError::new("No items_fk defined", None))?,
+            a_fk = self.source_fk,
+            values = (0..items.len())
+                .map(|i| format!("(${}, ${})", (i * 2) + 1, (i * 2) + 2))
+                .collect::<Vec<String>>()
+                .join(", ")
+        );
+
+        let insert_val_qry = conn.prepare(&insert_val_sql).await?;
+
+        let ids_to_add: Vec<Vec<Uuid>> = items
+            .iter()
+            .map(|item| -> Result<Vec<Uuid>, DbError> {
+                item.id()
+                    .map(|item_id| {
+                        let source_id = self.source_id;
+                        vec![source_id, item_id]
+                    })
+                    .ok_or_else(|| DbError::new("Item not persisted. No ID defined!", None))
+            })
+            .collect::<Result<Vec<Vec<Uuid>>, DbError>>()?;
+
+        let ids_to_add = ids_to_add.into_iter().flatten().collect::<Vec<Uuid>>();
+
+        let ids_to_add: Vec<&(dyn ToSql + Sync)> = ids_to_add
+            .iter()
+            .map(|uuid| uuid as &(dyn ToSql + Sync))
+            .collect();
+        conn.execute(&insert_val_qry, &ids_to_add).await?;
+        Ok(())
+    }
+
+    async fn remove_items_simple_join(
+        &mut self,
+        conn: &Connection,
+        items: Option<&[DbEntity<A>]>,
+    ) -> Result<(), DbError> {
+        let update_sql = match items {
+            Some(_) => format!(
+                "UPDATE FROM {target_table} SET {a_fk} = NULL WHERE {a_fk} = $1 AND id = ANY($2)",
+                target_table = self.target_table,
+                a_fk = self.source_fk
+            ),
+            _ => format!(
+                "UPDATE FROM {target_table} SET {a_fk} = NULL WHERE {a_fk} = $1",
+                target_table = self.target_table,
+                a_fk = self.source_fk
+            ),
+        };
+
+        let update_qry = conn.prepare(&update_sql).await?;
+
+        let id = self.source_id;
+        match items {
+            Some(items) => {
+                let ids_to_remove: Vec<Uuid> = items
+                    .iter()
+                    .map(|item| -> Result<Uuid, DbError> {
+                        item.id()
+                            .ok_or_else(|| DbError::new("Item not persisted. No ID defined!", None))
+                    })
+                    .collect::<Result<Vec<Uuid>, DbError>>()?;
+                conn.execute(&update_qry, &[&id, &ids_to_remove]).await?;
+            }
+            _ => {
+                conn.execute(&update_qry, &[&id]).await?;
+            }
+        };
+        Ok(())
+    }
+
+    async fn add_items_simple_join(
+        &mut self,
+        conn: &Connection,
+        items: &[DbEntity<A>],
+    ) -> Result<(), DbError> {
         let update_sql = format!(
-            "UPDATE FROM {target_table} SET {a_fk} = NULL WHERE {a_fk} = $1",
+            "UPDATE FROM {target_table} SET {a_fk} = $1 WHERE id =  ANY($2)",
             target_table = self.target_table,
             a_fk = self.source_fk
         );
 
-        let update_qry = conn.prepare(&update_sql);
+        let update_qry = conn.prepare(&update_sql).await?;
 
-        let insert_val_sql = format!(
-            "UPDATE FROM {target_table} SET {a_fk} = $1 WHERE id = $2",
-            target_table = self.target_table,
-            a_fk = self.source_fk
-        );
-        let insert_val_qry = conn.prepare(&insert_val_sql);
-        let (update_qry, insert_val_qry) = try_join!(update_qry, insert_val_qry)?;
-
-        let id = id_from_str(&self.source_id)?;
-        conn.execute(&update_qry, &[&id]).await?;
-
-        let params_owned: Vec<Vec<Uuid>> = self
-            .items
+        let id = self.source_id;
+        let ids_to_remove: Vec<Uuid> = items
             .iter()
-            .map(|db_entity| {
-                vec![
-                    Uuid::parse_str(&self.source_id).unwrap(),
-                    Uuid::parse_str(&format!("{}", db_entity.id)).unwrap(),
-                ]
+            .map(|item| -> Result<Uuid, DbError> {
+                item.id()
+                    .ok_or_else(|| DbError::new("Item not persisted. No ID defined!", None))
             })
-            .collect();
+            .collect::<Result<Vec<Uuid>, DbError>>()?;
+        conn.execute(&update_qry, &[&id, &ids_to_remove]).await?;
 
-        let params: Vec<Vec<_>> = params_owned
-            .iter()
-            .map(|inner_vec| {
-                inner_vec
-                    .iter()
-                    .map(|uuid_ref| uuid_ref as &(dyn ToSql + Sync))
-                    .collect()
-            })
-            .collect();
-
-        join_all(
-            params
-                .iter()
-                .map(|q_params| conn.execute(&insert_val_qry, &q_params[..])),
-        )
-        .await;
         Ok(())
     }
 
-    /// This method saves the items for the given join to the DB.
-    pub async fn save_items(&self, conn: &mut Connection) -> Result<(), DbError> {
-        conn.transaction().await?;
+    /// This method adds items for the given join to the DB.
+    pub async fn add_items(
+        &mut self,
+        conn: &mut Connection,
+        items: &[DbEntity<A>],
+    ) -> Result<(), DbError> {
         let result = async {
             match (self.join_table.as_ref(), self.items_fk.as_ref()) {
-                (Some(join_table), Some(items_fk)) => {
-                    self.save_items_table_join(&join_table, &items_fk, conn)
-                        .await?;
+                (Some(_), Some(_)) => {
+                    self.add_items_table_join(conn, items).await?;
                 }
                 _ => {
-                    self.save_items_simple_join(conn).await?;
+                    self.add_items_simple_join(conn, items).await?;
                 }
             };
-            conn.commit().await?;
             Ok(())
         }
         .await;
@@ -300,41 +413,18 @@ where
         }
         result
     }
-}
 
-/// This is the builder for a [DbJoin](struct.DbJoin.html)
-/// If you need to relate two different entities, _DbJoin\<DbData\>_ is used to get entities related to the specified DbData.\
-/// You need to use _JoinBuilder_ to create a DbJoin relation, and you can define both simple joins and table joins for M to N relations.
-///
-/// ## Simple join example:
-/// ```disable
-/// async fn office_users(
-///     user: &DbEntity<Office>,
-///     db_conn: &Connection,
-/// ) -> Result<DbJoin<User>, DbError> {
-///     JoinBuilder::new(user.data)
-///         .with_source_fk("id_office")
-///         .with_target(User::table_name())
-///         .with_sorting(&["data->>'name'"])
-///         .build(db_conn)
-///         .await
-/// }
-/// ```
-///
-/// ## M to N join example:
-/// ```disable
-/// async fn user_groups(
-///     user: &DbEntity<User>,
-///     db_conn: &Connection,
-/// ) -> Result<DbJoin<Group>, DbError> {
-///     JoinBuilder::new(user.data)
-///         .with_join_table("intrared.r_user_group", "id_user", "id_group")
-///         .with_target(Group::table_name())
-///         .with_sorting(&["data->>'name'"])
-///         .build(db_conn)
-///         .await
-/// }
-/// ```
+    pub async fn remove_items(
+        &mut self,
+        conn: &mut Connection,
+        items: Option<&[DbEntity<A>]>,
+    ) -> Result<(), DbError> {
+        match (self.join_table.as_ref(), self.items_fk.as_ref()) {
+            (Some(_), Some(_)) => self.remove_items_table_join(conn, items).await,
+            _ => self.remove_items_simple_join(conn, items).await,
+        }
+    }
+}
 
 pub struct JoinBuilder<'a, A, B>
 where
@@ -405,14 +495,17 @@ where
     }
 
     /// Creates the DbJoin object and fetches the data
-    pub fn build(&self) -> DbJoin<B> {
-        DbJoin {
+    pub fn build(&self) -> Result<DbJoin<B>, DbError> {
+        Ok(DbJoin {
             source_table: A::table_name().to_string(),
-            source_id: format!("{}", self.source.id().expect("no id for source")),
+            source_id: self
+                .source
+                .id()
+                .ok_or_else(|| DbError::new("Source entity has no ID", None))?,
             source_fk: self.source_fk.expect("no source_fk defined").to_string(),
             target_table: self
                 .target_table
-                .expect("no target_table defined")
+                .ok_or_else(|| DbError::new("Source entity has no target_table", None))?
                 .to_string(),
             join_table: self.join_table.map(String::from),
             items_fk: self.items_fk.map(String::from),
@@ -422,6 +515,8 @@ where
                 .map(|&item| item.to_string())
                 .collect::<Vec<String>>(),
             items: Vec::<DbEntity<B>>::new(),
-        }
+            offset: 0,
+            limit: -1,
+        })
     }
 }

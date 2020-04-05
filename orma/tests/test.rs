@@ -2,7 +2,7 @@ pub mod group;
 pub mod user;
 
 use group::*;
-use orma::{new_data, Connection, DbData, DbEntity, DbError};
+use orma::{new_data, Connection, DbEntity, DbError};
 use std::env;
 use user::*;
 
@@ -176,7 +176,7 @@ async fn test_user_group_join(connection: Connection) {
     .await
     .unwrap();
 
-    println!("User entity id: {:?}", &user_entity1.data.id());
+    // println!("User entity id: {:?}", &user_entity1.data.id());
     let user1_groups = &mut user_groups(&user_entity1, &conn).await.unwrap();
 
     assert!(
@@ -199,10 +199,12 @@ async fn test_user_group_join(connection: Connection) {
     let group2 = create_group(group_name2, group_description2);
 
     let mut group_entity2 = DbEntity::from_data(group2);
-
     group_entity2.insert(&conn).await.unwrap();
-    user1_groups.items.push(group_entity2);
-    user1_groups.save_items(&mut conn).await.unwrap();
+
+    user1_groups
+        .add_items(&mut conn, &[group_entity2])
+        .await
+        .unwrap();
     user1_groups.sorting = vec!["data->>'name'".to_owned()];
     user1_groups.fetch(&conn).await.unwrap();
     assert!(

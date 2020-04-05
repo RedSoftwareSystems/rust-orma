@@ -41,7 +41,7 @@ pub async fn user_groups(
         .with_join_table("intrared.r_user_group", "id_user", "id_group")
         .with_target(Group::table_name())
         .with_sorting(&["data->>'name'"])
-        .build();
+        .build()?;
     db_join.fetch(db_conn).await?;
     Ok(db_join)
 }

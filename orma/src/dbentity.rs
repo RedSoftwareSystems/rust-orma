@@ -43,7 +43,7 @@ pub fn make_sort_statement(order_by: &[&str], alias: Option<&str>) -> String {
 
 /// This trait is maps data in a data table and
 /// it's used along with DbEntity structure
-pub trait DbData {
+pub trait DbData: Serialize + DeserializeOwned {
     /// The name of the db table where the implementing struct is mapped to.
     fn table_name() -> &'static str;
 
@@ -383,6 +383,7 @@ mod tests {
 
     #[test]
     fn test_select_extra_columns() {
+        #[derive(Serialize, Deserialize)]
         struct Test {};
 
         impl DbData for Test {

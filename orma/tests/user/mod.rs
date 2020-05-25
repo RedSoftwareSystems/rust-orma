@@ -33,15 +33,11 @@ impl User {
     }
 }
 
-pub async fn user_groups(
-    user: &DbEntity<User>,
-    db_conn: &Connection,
-) -> Result<DbJoin<Group>, DbError> {
-    let mut db_join = JoinBuilder::new(&user.data)
+pub fn user_groups(user: &DbEntity<User>) -> Result<DbJoin, DbError> {
+    let db_join = JoinBuilder::new(&user.data)
         .with_join_table("intrared.r_user_group", "id_user", "id_group")
         .with_target(Group::table_name())
         .with_sorting(&["data->>'name'"])
-        .build();
-    db_join.fetch(db_conn).await?;
+        .build()?;
     Ok(db_join)
 }

@@ -43,7 +43,7 @@ pub fn make_sort_statement(order_by: &[&str], alias: Option<&str>) -> String {
 
 /// This trait is maps data in a data table and
 /// it's used along with DbEntity structure
-pub trait DbData {
+pub trait DbData: Serialize + DeserializeOwned {
     /// The name of the db table where the implementing struct is mapped to.
     fn table_name() -> &'static str;
 
@@ -267,7 +267,7 @@ where
         limit: i64,
     ) -> Result<Vec<Self>, DbError> {
         let prepared_s = conn.prepare(&format!(
-            "{select_part}{where}{sorting}{limit}{offset}",
+            "{select_part}{where}{sorting}{offset}{limit}",
             select_part = T::select_part(),
             where = match filter {
                 Some(where_clause) => format!(" WHERE {}",where_clause.0),
@@ -277,19 +277,30 @@ where
                 Some(sorting_statement) => format!(" ORDER BY {}", make_sort_statement(sorting_statement, None) ),
                 None => String::from("")
             },
-            limit = format!(" LIMIT ${}", match filter {
-                    Some(filter) => filter.1.len() + 1,
-                    None => 1
-            }),
             offset = format!(" OFFSET ${}", match filter {
-                    Some(filter) => filter.1.len() + 2,
+                    Some(filter) => filter.1.len() + 1,
                     None => 2
             }),
+            limit = if limit < 0 {
+                    "".to_string()
+                } else {
+                    format!(" LIMIT ${}", match filter {
+                        Some(filter) => filter.1.len() + 2,
+                        None => 1
+                })
+            },
         )).await?;
 
-        let params: Vec<&(dyn ToSql + Sync)> = match filter {
-            Some(filter) => [filter.1, &[&limit, &offset]].concat(),
-            None => vec![&limit, &offset],
+        let params: Vec<&(dyn ToSql + Sync)> = if limit < 0 {
+            match filter {
+                Some(filter) => [filter.1, &[&offset]].concat(),
+                None => vec![&offset],
+            }
+        } else {
+            match filter {
+                Some(filter) => [filter.1, &[&offset, &limit]].concat(),
+                None => vec![&offset, &limit],
+            }
         };
         let result = conn.query(&prepared_s, &params[..]).await?;
         DbEntity::from_rows(&result)
@@ -372,6 +383,7 @@ mod tests {
 
     #[test]
     fn test_select_extra_columns() {
+        #[derive(Serialize, Deserialize)]
         struct Test {};
 
         impl DbData for Test {

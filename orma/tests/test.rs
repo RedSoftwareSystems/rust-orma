@@ -2,7 +2,7 @@ pub mod group;
 pub mod user;
 
 use group::*;
-use orma::{new_data, Connection, DbData, DbEntity, DbError};
+use orma::{new_data, Connection, DbEntity, DbError};
 use std::env;
 use user::*;
 
@@ -176,17 +176,19 @@ async fn test_user_group_join(connection: Connection) {
     .await
     .unwrap();
 
-    println!("User entity id: {:?}", &user_entity1.data.id());
-    let user1_groups = &mut user_groups(&user_entity1, &conn).await.unwrap();
+    // println!("User entity id: {:?}", &user_entity1.data.id());
+    let user1_groups = &mut user_groups(&user_entity1).unwrap();
 
+    let user1_groups_items: Vec<DbEntity<Group>> = user1_groups.fetch(&conn).await.unwrap();
     assert!(
-        user1_groups.items.len() == 1,
+        user1_groups_items.len() == 1,
         format!(
             "User should have just 1 associated group. {} groups where found.",
-            user1_groups.items.len()
+            user1_groups_items.len()
         )
     );
-    let ug_grp1_entity = user1_groups.items.get(0).unwrap();
+    let ug_grp1_entity = user1_groups_items.get(0).unwrap();
+
     assert_eq!(
         group_entity1.data.name, ug_grp1_entity.data.name,
         "Expected {}. Found {}",
@@ -199,45 +201,49 @@ async fn test_user_group_join(connection: Connection) {
     let group2 = create_group(group_name2, group_description2);
 
     let mut group_entity2 = DbEntity::from_data(group2);
-
     group_entity2.insert(&conn).await.unwrap();
-    user1_groups.items.push(group_entity2);
-    user1_groups.save_items(&mut conn).await.unwrap();
+
+    user1_groups
+        .add_items(&mut conn, &[group_entity2])
+        .await
+        .unwrap();
     user1_groups.sorting = vec!["data->>'name'".to_owned()];
-    user1_groups.fetch(&conn).await.unwrap();
+
+    let user1_groups_items: Vec<DbEntity<Group>> = user1_groups.fetch(&conn).await.unwrap();
     assert!(
-        user1_groups.items.len() == 2,
+        user1_groups_items.len() == 2,
         format!(
             "User should have just 2 associated groups. {} groups where found.",
-            user1_groups.items.len()
+            user1_groups_items.len()
         )
     );
     assert_eq!(
-        user1_groups.items.get(0).unwrap().data.name,
+        user1_groups_items.get(0).unwrap().data.name,
         group_name1,
         "Expected user name {}, but {} was found.",
         group_name1,
-        user1_groups.items.get(0).unwrap().data.name
+        user1_groups_items.get(0).unwrap().data.name
     );
     user1_groups.sorting = vec!["data->>'name' DESC".to_owned()];
-    user1_groups.fetch(&conn).await.unwrap();
+
+    let user1_groups_items: Vec<DbEntity<Group>> = user1_groups.fetch(&conn).await.unwrap();
     assert_eq!(
-        user1_groups.items.get(0).unwrap().data.name,
+        user1_groups_items.get(0).unwrap().data.name,
         group_name2,
         "Expected user name {}, but {} was found.",
         group_name2,
-        user1_groups.items.get(0).unwrap().data.name
+        user1_groups_items.get(0).unwrap().data.name
     );
 
-    user1_groups
+    let user1_groups_items: Vec<DbEntity<Group>> = user1_groups
         .fetch_filtered(&conn, ("a.data->>'name' = $1", &[&group_name2]))
         .await
         .unwrap();
     assert!(
-        user1_groups.items.len() == 1,
+        user1_groups_items.len() == 1,
         format!(
             "User should have just 1 associated groups. {} groups where found.",
-            user1_groups.items.len()
+            user1_groups_items.len()
         )
     );
 }

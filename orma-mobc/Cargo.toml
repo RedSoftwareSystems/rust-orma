@@ -11,11 +11,11 @@ keywords = ["postgres", "postgresql", "pool", "orma", "mobc"]
 categories = ["database"]
 
 [dependencies]
-async-trait = { version = "0.1.29" }
+async-trait = { version = "0.1.31" }
 mobc = { version = "0.5.7" }
-orma = { version = "=0.3.0",  path = "../orma" }
+orma = { version = "=0.3.1",  path = "../orma" }
 
 [dev-dependencies]
 futures = "0.3.4"
-tokio = { version = "0.2.16", features = [ "full" ] }
+tokio = { version = "0.2.21", features = [ "full" ] }
 orma = { path = "../orma", features = [ "derive" ] }

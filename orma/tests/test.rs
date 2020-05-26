@@ -176,6 +176,26 @@ async fn test_user_group_join(connection: Connection) {
     .await
     .unwrap();
 
+    let all_groups: Vec<DbEntity<Group>> =
+        DbEntity::find_all(&conn, None, None, 0, 1).await.unwrap();
+    assert!(
+        all_groups.len() == 1,
+        format!(
+            "There should be just 1 group. {} groups where found.",
+            all_groups.len()
+        )
+    );
+
+    let all_groups: Vec<DbEntity<Group>> =
+        DbEntity::find_all(&conn, None, None, 0, 2).await.unwrap();
+    assert!(
+        all_groups.len() == 1,
+        format!(
+            "There should be just 1 group. {} groups where found.",
+            all_groups.len()
+        )
+    );
+
     // println!("User entity id: {:?}", &user_entity1.data.id());
     let user1_groups = &mut user_groups(&user_entity1).unwrap();
 

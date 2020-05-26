@@ -279,14 +279,14 @@ where
             },
             offset = format!(" OFFSET ${}", match filter {
                     Some(filter) => filter.1.len() + 1,
-                    None => 2
+                    None => 1
             }),
             limit = if limit < 0 {
                     "".to_string()
                 } else {
                     format!(" LIMIT ${}", match filter {
                         Some(filter) => filter.1.len() + 2,
-                        None => 1
+                        None => 2
                 })
             },
         )).await?;

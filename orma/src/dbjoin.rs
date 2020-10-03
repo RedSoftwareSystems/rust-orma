@@ -264,22 +264,6 @@ impl DbJoin {
             conn.execute(&delete_qry, &[&id]).await?;
         };
 
-        // match items {
-        //     Some(items) => {
-        //         let ids_to_remove: Vec<Uuid> = items
-        //             .iter()
-        //             .map(|item| -> Result<Uuid, DbError> {
-        //                 item.id()
-        //                     .ok_or_else(|| DbError::new("Item not persisted. No ID defined!", None))
-        //             })
-        //             .collect::<Result<Vec<Uuid>, DbError>>()?;
-        //         conn.execute(&delete_qry, &[&ids_to_remove]).await?;
-        //     }
-        //     None => {
-        //         let id = self.source_id;
-        //         conn.execute(&delete_qry, &[&id]).await?;
-        //     }
-        // };
         Ok(())
     }
 
@@ -380,7 +364,7 @@ impl DbJoin {
     pub async fn add_items<A>(
         &self,
         conn: &mut Connection,
-        items: &[DbEntity<A>],
+        items: &[&DbEntity<A>],
     ) -> Result<(), DbError>
     where
         A: DbData,
@@ -425,7 +409,7 @@ impl DbJoin {
     pub async fn remove_items<A>(
         &self,
         conn: &mut Connection,
-        items: Option<&[DbEntity<A>]>,
+        items: Option<&[&DbEntity<A>]>,
     ) -> Result<(), DbError>
     where
         A: DbData,

@@ -224,7 +224,7 @@ async fn test_user_group_join(connection: Connection) {
     group_entity2.insert(&conn).await.unwrap();
 
     user1_groups
-        .add_items(&mut conn, &[group_entity2])
+        .add_items(&mut conn, &[&group_entity2])
         .await
         .unwrap();
     user1_groups.sorting = vec!["data->>'name'".to_owned()];

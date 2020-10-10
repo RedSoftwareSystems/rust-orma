@@ -1,6 +1,6 @@
 [package]
 name = "orma-derive"
-version = "0.3.2"
+version = "0.3.3"
 authors = ["Andrea Chiumenti <achiumenti@red.software.systems>"]
 edition = "2018"
 license = "MIT"

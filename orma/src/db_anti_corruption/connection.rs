@@ -203,7 +203,7 @@ impl Connection {
             // String::from("BEGIN")
             "BEGIN".into()
         } else {
-            format!("SAVEPOINT pt{}", self.transaction_n + 1)
+            format!("SAVEPOINT pt{}", self.transaction_n)
         };
         self.batch_execute(&qry).await?;
         self.transaction_n += 1;
@@ -218,9 +218,8 @@ impl Connection {
             let qry = if self.transaction_n == 1 {
                 String::from("COMMIT")
             } else {
-                format!("RELASE pt{}", self.transaction_n + 1)
+                format!("RELEASE pt{}", self.transaction_n - 1)
             };
-
             self.batch_execute(&qry).await?;
             self.transaction_n -= 1;
             Ok(())
@@ -235,9 +234,8 @@ impl Connection {
             let qry = if self.transaction_n == 1 {
                 String::from("ROLLBACK")
             } else {
-                format!("ROLLBACK TO pt{}", self.transaction_n + 1)
+                format!("ROLLBACK TO SAVEPOINT pt{}", self.transaction_n - 1)
             };
-
             self.batch_execute(&qry).await?;
             self.transaction_n -= 1;
             Ok(())

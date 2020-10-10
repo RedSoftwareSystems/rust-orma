@@ -1,6 +1,6 @@
 [package]
 name = "orma-mobc"
-version = "0.3.2"
+version = "0.3.3"
 authors = ["Andrea Chiumenti <achiumenti@red.software.systems>"]
 edition = "2018"
 license = "MIT"
@@ -13,9 +13,9 @@ categories = ["database"]
 [dependencies]
 async-trait = { version = "0.1.41" }
 mobc = { version = "0.5.12" }
-orma = { version = "=0.3.2",  path = "../orma" }
+orma = { version = "=0.3.3",  path = "../orma" }
 
 [dev-dependencies]
-futures = "0.3.4"
+futures = "0.3.5"
 tokio = { version = "0.2.22", features = [ "full" ] }
 orma = { path = "../orma", features = [ "derive" ] }
